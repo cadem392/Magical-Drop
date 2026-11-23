@@ -363,6 +363,66 @@ draw_board_col:
     jr $ra
     nop
 
+
+##############################################################################
+# ADVANCE BUBBLE ROWS
+##############################################################################
+
+advance_bubble_rows:
+    # Shift every existing bubble down by one row.
+    # Fill the new top row with random bubbles.
+    # Redraw the updated board.
+
+    addiu $sp, $sp, -8
+    sw $ra, 4($sp)
+
+    # Find the address of the last cell in the board.
+    la $t0, board
+    li $t1, PLAYFIELD_ROWS
+    li $t2, PLAYFIELD_COLS
+
+    mul $t3, $t1, $t2
+    addiu $t3, $t3, -1
+    sll $t3, $t3, 2
+    addu $t4, $t0, $t3     # Destination: last cell
+
+    # Source is one row above the destination.
+    sll $t5, $t2, 2
+    subu $t6, $t4, $t5
+
+    # Number of cells that need to move.
+    addiu $t7, $t1, -1
+    mul $t7, $t7, $t2
+
+advance_bubble_rows_loop:
+    # Copy each bubble into the row below it.
+    lw $t8, 0($t6)
+    sw $t8, 0($t4)
+
+    # Move backwards through memory.
+    addiu $t6, $t6, -4
+    addiu $t4, $t4, -4
+    addiu $t7, $t7, -1
+
+    bgtz $t7, advance_bubble_rows_loop
+    nop
+
+    # Generate a new random top row.
+    li $a0, 0
+    jal fill_bubble_row
+    nop
+
+    # Redraw the updated board.
+    jal draw_board
+    nop
+
+    lw $ra, 4($sp)
+    addiu $sp, $sp, 8
+
+    jr $ra
+    nop
+
+
 get_colour:
     # Return the colour word from bubble_palette from id value
     la $t0, bubble_palette
@@ -530,22 +590,72 @@ handle_key_finished:
     jr $ra
     nop
 
+
 game_loop:
     # 1a. Check if key has been pressed
     jal check_keyboard_inputs
     nop
-    
+
+    # Save the key so we can use it after handle_key
+    move $s0, $v0
+
     # 1b. Check which key has been pressed
-    move $a0, $v0
+    move $a0, $s0
     jal handle_key
     nop
-    
+
+    # Count only gameplay keys (A, D, S, W)
+    li $t0, KEY_A
+    beq $s0, $t0, count_wave_key
+    nop
+
+    li $t0, KEY_D
+    beq $s0, $t0, count_wave_key
+    nop
+
+    li $t0, KEY_S
+    beq $s0, $t0, count_wave_key
+    nop
+
+    li $t0, KEY_W
+    beq $s0, $t0, count_wave_key
+    nop
+
+    # Ignore other keys
+    j game_loop_draw
+    nop
+
+count_wave_key:
+    # Increment moves since the last wave
+    lw $t0, moves_since_last_wave
+    addiu $t0, $t0, 1
+
+    li $t1, MOVES_PER_WAVE
+    bne $t0, $t1, save_wave_count
+    nop
+
+    # 10 keys reached: reset counter and advance rows
+    sw $zero, moves_since_last_wave
+
+    jal advance_bubble_rows
+    nop
+
+    j game_loop_draw
+    nop
+
+save_wave_count:
+    sw $t0, moves_since_last_wave
+
+game_loop_draw:
     # 2a. Check for collisions
-	# 2b. Update locations (capsules)
-	# 3. Draw the screen
-	jal draw_player
-	nop
-	# 4. Sleep
+    # 2b. Update locations (capsules)
+    # 3. Draw the screen
+    jal draw_player
+    nop
+
+    # 4. Sleep
 
     # 5. Go back to Step 1
     j game_loop
+    nop
+
