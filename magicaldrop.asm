@@ -37,6 +37,15 @@
 .eqv KEY_W           0x77
 .eqv KEY_Q           0x71
 
+.eqv PLAYER_COL_OFFSET          0
+.eqv PLAYER_SCORE_OFFSET        4
+.eqv PLAYER_HELD_COLOUR_OFFSET  8
+.eqv PLAYER_HELD_COUNT_OFFSET   12
+.eqv PLAYER_STATE_SIZE          16
+
+.eqv PLAYER_ROW                 14
+.eqv MOVES_PER_WAVE             10
+
     .data
 ##############################################################################
 # Immutable Data
@@ -56,14 +65,22 @@ bubble_palette:
     .word 0x00ffff00     # yellow
     .word 0x00777777     # grey
     .word 0x00ff00ba     # player
-    
+
+    .align 2
+
+#Player-State Vars
+player_state:
 player_col:
     .word 3              # begin in centre column
+player_score:
+    .word 0
 held_colour:
     .word CELL_EMPTY
 held_count:
     .word 0
-keypress_count:
+
+#Game-State Vars
+moves_since_last_wave:
     .word 0
 game_over:
     .word 0
@@ -99,6 +116,7 @@ draw_frame:
     
     li   $s0, 0
     li   $s1, CELL_FRAME
+    li   $s2, 0
     
 frame_row_loop:
     # If row is 0, draw full row
@@ -223,6 +241,29 @@ draw_unit:
 ##############################################################################
 
 draw_player:
+    # Unfinished draw player function, still need to paint units around the player with empty cell colour
+    # Allocate stack space
+    addi $sp, $sp, -8
+    sw   $ra, 4($sp)
+    
+    # Load PLayer State
+    la $t0, player_state
+    lw $t1, PLAYER_COL_OFFSET($t0)
+
+    # Pass in Arguments
+    li    $a0, PLAYER_ROW
+    addiu $a1, $t1, 1        # Logical column + left border
+    li    $a2, CELL_PLAYER
+    
+    # Draw Player
+    jal draw_unit
+    nop
+    
+    # Return stack space
+    lw   $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr   $ra
+    nop
 
 ##############################################################################
 # KEYBOARD OPS
@@ -236,28 +277,102 @@ check_keyboard_inputs:
     beq  $t1, $zero, no_key
     nop
     
+    lw   $v0, 4($t0)        # Return pressed key
+    jr   $ra
+    nop
     
-
 no_key:
     move $v0, $zero
     jr   $ra
     nop
 
+handle_key:
+    # Handle cases for keys
+    # First load return address to the stack
+    addi $sp, $sp, -8
+    sw   $ra, 4($sp)
+    
+    beq $a0, $zero, handle_key_finished
+    nop
+
+    li $t0, KEY_A
+    beq $t0, $a0, handle_A_press
+    nop
+    
+    li $t0, KEY_D
+    beq $t0, $a0, handle_D_press
+    nop
+    
+    li $t0, KEY_S
+    beq $t0, $a0, handle_S_press
+    nop
+    
+    li $t0, KEY_Q
+    beq $t0, $a0, handle_Q_press
+    nop
+    
+    j handle_key_finished
+    nop
+
 handle_A_press:
-
+    # branch to key finished if out of bounds, if not decrement player col and finish
+    la $t0, player_state
+    lw $t1, PLAYER_COL_OFFSET($t0)
+    
+    beq $t1, 0, handle_key_finished
+    
+    addi $t1, $t1, -1
+    sw   $t1, PLAYER_COL_OFFSET($t0)
+    
+    j handle_key_finished
+    nop
+    
 handle_D_press:
-
+    # branch to key finished if out of bounds, if not increment player col and finish
+    la $t0, player_state
+    lw $t1, PLAYER_COL_OFFSET($t0)
+    
+    li $t2, PLAYFIELD_COLS
+    addi $t2, $t2, -1
+    
+    beq $t1, $t2, handle_key_finished
+    
+    addi $t1, $t1, 1
+    sw   $t1, PLAYER_COL_OFFSET($t0)
+    
+    j handle_key_finished
+    nop
+    
 handle_S_press:
-
+    j handle_key_finished
+    nop
+    
 handle_Q_press:
+    j handle_key_finished
+    nop
+    
+handle_key_finished:
+    # Return the stack pointer
+    lw $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr $ra
+    nop
 
 game_loop:
     # 1a. Check if key has been pressed
     jal check_keyboard_inputs
+    nop
+    
     # 1b. Check which key has been pressed
+    move $a0, $v0
+    jal handle_key
+    nop
+    
     # 2a. Check for collisions
 	# 2b. Update locations (capsules)
 	# 3. Draw the screen
+	jal draw_player
+	nop
 	# 4. Sleep
 
     # 5. Go back to Step 1
