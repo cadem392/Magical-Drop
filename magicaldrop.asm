@@ -89,6 +89,19 @@ game_over:
 # Mutable Data
 ##############################################################################
 
+    .align 2
+
+# Bubble playfield: 7 columns x 14 rows = 98 cells
+# Each cell occupies 4 bytes (one word).
+# Cell values:
+#   0 = Empty
+#   1 = Red
+#   2 = Green
+#   3 = Blue
+#   4 = Yellow
+board:
+    .space 392              # 98 cells * 4 bytes = 392 bytes
+
 ##############################################################################
 # Code
 ##############################################################################
@@ -98,9 +111,17 @@ game_over:
     # Run the game.
 main:
     # Initialize the game
+    jal initialize_board
+    nop
+
     jal draw_frame
-    
+    nop
+
+    jal draw_board
+    nop
+
     j game_loop
+    nop
     
 ##############################################################################
 # DRAW FRAME
@@ -188,8 +209,159 @@ frame_finished:
 # HELPERS
 ##############################################################################
 
+##############################################################################
+# INITIALIZE BOARD
+##############################################################################
+
+initialize_board:
+    # Save registers
+    addiu $sp, $sp, -12
+    sw $ra, 8($sp)
+    sw $s0, 4($sp)
+    sw $s1, 0($sp)
+
+    # Clear all 98 cells
+    la $s0, board
+    li $s1, 98
+
+clear_board_loop:
+    sw $zero, 0($s0)
+    addiu $s0, $s0, 4
+    addiu $s1, $s1, -1
+
+    bgtz $s1, clear_board_loop
+    nop
+
+    # Generate 4 rows of random bubbles at the top
+    li $s0, 0
+
+initialize_rows_loop:
+    move $a0, $s0
+    jal fill_bubble_row
+    nop
+
+    addiu $s0, $s0, 1
+    li $t0, 4
+
+    blt $s0, $t0, initialize_rows_loop
+    nop
+
+    # Restore registers
+    lw $s1, 0($sp)
+    lw $s0, 4($sp)
+    lw $ra, 8($sp)
+    addiu $sp, $sp, 12
+
+    jr $ra
+    nop
+
+##############################################################################
+# FILL BUBBLE ROW
+##############################################################################
+
 fill_bubble_row:
     # Fill a row of the board with random coloured bubbles
+    # $a0 = row number (0-13)
+
+    addiu $sp, $sp, -8
+    sw $s0, 4($sp)
+    sw $s1, 0($sp)
+
+    # Calculate starting address of the requested row
+    li $t0, PLAYFIELD_COLS
+    mul $t1, $a0, $t0
+    sll $t1, $t1, 2
+
+    la $s0, board
+    addu $s0, $s0, $t1
+
+    # Generate 7 bubbles
+    li $s1, PLAYFIELD_COLS
+
+fill_bubble_loop:
+    # Generate random number 0-3
+    li $v0, 42
+    li $a0, 0
+    li $a1, 4
+    syscall
+
+    # Convert to colour ID 1-4
+    addiu $t0, $a0, 1
+
+    # Store bubble in current cell
+    sw $t0, 0($s0)
+
+    # Advance to next cell
+    addiu $s0, $s0, 4
+    addiu $s1, $s1, -1
+
+    bgtz $s1, fill_bubble_loop
+    nop
+
+    # Restore registers
+    lw $s1, 0($sp)
+    lw $s0, 4($sp)
+    addiu $sp, $sp, 8
+
+    jr $ra
+    nop
+
+##############################################################################
+# DRAW BOARD
+##############################################################################
+
+draw_board:
+    # Draw the 7x14 bubble grid inside the frame
+    # Board rows/columns are offset by 1 for the border
+
+    addiu $sp, $sp, -16
+    sw $ra, 12($sp)
+    sw $s0, 8($sp)
+    sw $s1, 4($sp)
+    sw $s2, 0($sp)
+
+    la $s2, board
+    li $s0, 0                  # Current row
+
+draw_board_row:
+    li $s1, 0                  # Current column
+
+draw_board_col:
+    # Load the current cell's colour ID
+    lw $a2, 0($s2)
+
+    # Convert board coordinates to bitmap coordinates
+    addiu $a0, $s0, 1          # Row + top border
+    addiu $a1, $s1, 1          # Column + left border
+
+    # Draw the current cell
+    jal draw_unit
+    nop
+
+    # Advance to next cell
+    addiu $s2, $s2, 4
+    addiu $s1, $s1, 1
+
+    li $t0, PLAYFIELD_COLS
+    blt $s1, $t0, draw_board_col
+    nop
+
+    # Move to next row
+    addiu $s0, $s0, 1
+
+    li $t0, PLAYFIELD_ROWS
+    blt $s0, $t0, draw_board_row
+    nop
+
+    # Restore registers
+    lw $s2, 0($sp)
+    lw $s1, 4($sp)
+    lw $s0, 8($sp)
+    lw $ra, 12($sp)
+    addiu $sp, $sp, 16
+
+    jr $ra
+    nop
 
 get_colour:
     # Return the colour word from bubble_palette from id value
