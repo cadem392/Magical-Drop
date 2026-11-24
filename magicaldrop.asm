@@ -19,7 +19,7 @@
 .eqv PLAYFIELD_ROWS  14
 
 .eqv FRAME_COLS 9
-.eqv FRAME_ROWS 16
+.eqv FRAME_ROWS 17
 
 .eqv BITMAP_SIZE_UNITS 32
 
@@ -43,7 +43,7 @@
 .eqv PLAYER_HELD_COUNT_OFFSET   12
 .eqv PLAYER_STATE_SIZE          16
 
-.eqv PLAYER_ROW                 14
+.eqv PLAYER_ROW                 15
 .eqv MOVES_PER_WAVE             10
 
     .data
@@ -118,6 +118,9 @@ main:
     nop
 
     jal draw_board
+    nop
+
+    jal draw_player
     nop
 
     j game_loop
@@ -521,28 +524,48 @@ draw_unit:
 ##############################################################################
 
 draw_player:
-    # Unfinished draw player function, still need to paint units around the player with empty cell colour
-    # Allocate stack space
-    addi $sp, $sp, -8
-    sw   $ra, 4($sp)
-    
-    # Load PLayer State
+    # Draw the player without leaving trails.
+    # Clear the player row, then draw the current position.
+
+    addiu $sp, $sp, -8
+    sw $ra, 4($sp)
+    sw $s0, 0($sp)
+
+    # Clear all 7 playable cells in the player row.
+    li $s0, 0
+
+clear_player_row:
+    li $a0, PLAYER_ROW
+    addiu $a1, $s0, 1
+    li $a2, CELL_EMPTY
+
+    jal draw_unit
+    nop
+
+    addiu $s0, $s0, 1
+
+    li $t0, PLAYFIELD_COLS
+    blt $s0, $t0, clear_player_row
+    nop
+
+    # Load the player's current column.
     la $t0, player_state
     lw $t1, PLAYER_COL_OFFSET($t0)
 
-    # Pass in Arguments
-    li    $a0, PLAYER_ROW
-    addiu $a1, $t1, 1        # Logical column + left border
-    li    $a2, CELL_PLAYER
-    
-    # Draw Player
+    # Draw the player at the current position.
+    li $a0, PLAYER_ROW
+    addiu $a1, $t1, 1
+    li $a2, CELL_PLAYER
+
     jal draw_unit
     nop
-    
-    # Return stack space
-    lw   $ra, 4($sp)
-    addi $sp, $sp, 8
-    jr   $ra
+
+    # Restore registers.
+    lw $s0, 0($sp)
+    lw $ra, 4($sp)
+    addiu $sp, $sp, 8
+
+    jr $ra
     nop
 
 ##############################################################################
@@ -724,12 +747,26 @@ game_loop_draw:
     # 2a. Check for collisions
     # 2b. Update locations (capsules)
     # 3. Draw the screen
+
+    # Only redraw the player after A or D
+    li $t0, KEY_A
+    beq $s0, $t0, repaint_player
+    nop
+
+    li $t0, KEY_D
+    beq $s0, $t0, repaint_player
+    nop
+
+    j game_loop_continue
+    nop
+
+repaint_player:
     jal draw_player
     nop
 
+game_loop_continue:
     # 4. Sleep
 
     # 5. Go back to Step 1
     j game_loop
     nop
-
