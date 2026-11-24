@@ -843,7 +843,8 @@ handle_S_press:
     nop
     
 handle_Q_press:
-    j handle_key_finished
+    # Quit the game when Q is pressed
+    j game_over_exit
     nop
     
 handle_key_finished:
@@ -961,7 +962,16 @@ repaint_player:
     nop
 
 game_loop_continue:
-    # 4. Sleep
+    # 4a. Refresh the bubble board
+    # The player is drawn separately to avoid flickering.
+    jal draw_board
+    nop
+
+    # 4b. Sleep approximately 16 milliseconds
+    # This targets roughly 60 updates per second.
+    li $v0, 32
+    li $a0, 16
+    syscall
 
     # 5. Go back to Step 1
     j game_loop
