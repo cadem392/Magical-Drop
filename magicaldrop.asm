@@ -422,6 +422,54 @@ advance_bubble_rows_loop:
     jr $ra
     nop
 
+##############################################################################
+# CHECK GAME OVER
+##############################################################################
+
+check_game_over:
+    # Check whether any bubble occupies the bottom row.
+    # If found, set game_over to 1.
+
+    # Calculate the starting address of the last row (row 13)
+    la $t0, board
+
+    li $t1, PLAYFIELD_ROWS
+    addiu $t1, $t1, -1
+
+    li $t2, PLAYFIELD_COLS
+    mul $t1, $t1, $t2
+    sll $t1, $t1, 2
+
+    addu $t0, $t0, $t1
+
+    # Check all 7 cells in the bottom row
+    li $t2, PLAYFIELD_COLS
+
+check_game_over_loop:
+    lw $t3, 0($t0)
+
+    # Any non-empty cell means game over
+    bne $t3, $zero, game_over_reached
+    nop
+
+    # Move to the next cell
+    addiu $t0, $t0, 4
+    addiu $t2, $t2, -1
+
+    bgtz $t2, check_game_over_loop
+    nop
+
+    # No bubbles in the bottom row
+    jr $ra
+    nop
+
+game_over_reached:
+    # Set game_over = 1
+    li $t3, 1
+    sw $t3, game_over
+
+    jr $ra
+    nop
 
 get_colour:
     # Return the colour word from bubble_palette from id value
@@ -625,6 +673,15 @@ game_loop:
     j game_loop_draw
     nop
 
+##############################################################################
+# GAME OVER EXIT
+##############################################################################
+
+game_over_exit:
+    # Exit the program when game_over is triggered
+    li $v0, 10
+    syscall
+
 count_wave_key:
     # Increment moves since the last wave
     lw $t0, moves_since_last_wave
@@ -634,10 +691,27 @@ count_wave_key:
     bne $t0, $t1, save_wave_count
     nop
 
-    # 10 keys reached: reset counter and advance rows
+    # 10 keys reached: reset counter
     sw $zero, moves_since_last_wave
 
+    # Check before shifting to avoid overwriting bottom-row bubbles
+    jal check_game_over
+    nop
+
+    lw $t0, game_over
+    bne $t0, $zero, game_over_exit
+    nop
+
+    # Shift existing bubbles down and generate a new top row
     jal advance_bubble_rows
+    nop
+
+    # Check if bubbles reached the bottom after shifting
+    jal check_game_over
+    nop
+
+    lw $t0, game_over
+    bne $t0, $zero, game_over_exit
     nop
 
     j game_loop_draw
