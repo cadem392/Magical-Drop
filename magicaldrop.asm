@@ -761,6 +761,97 @@ clear_player_row:
     nop
 
 ##############################################################################
+# GRAB BUBBLES
+##############################################################################
+
+grab_bubbles:
+    # Grab consecutive same-coloured bubbles from the
+    # bottommost occupied cell of the player's column.
+    # Store the collected colour and count.
+    # Do not grab again while already holding bubbles.
+
+    addiu $sp, $sp, -8
+    sw $ra, 4($sp)
+
+    # Cannot grab if already holding bubbles
+    lw $t0, held_count
+    bne $t0, $zero, grab_bubbles_finished
+    nop
+
+    # Get player's current column
+    lw $t0, player_col
+
+    # Start at the bottom row of that column
+    la $t1, board
+    li $t2, PLAYFIELD_ROWS
+    addiu $t2, $t2, -1
+
+    li $t3, PLAYFIELD_COLS
+    mul $t4, $t2, $t3
+    addu $t4, $t4, $t0
+    sll $t4, $t4, 2
+    addu $t1, $t1, $t4
+
+grab_find_bottom:
+    # Search upward for the lowest occupied bubble
+    lw $t5, 0($t1)
+
+    bne $t5, $zero, grab_start
+    nop
+
+    # Move one row upward (7 words = 28 bytes)
+    addiu $t1, $t1, -28
+    addiu $t2, $t2, -1
+
+    bgez $t2, grab_find_bottom
+    nop
+
+    # Column is empty
+    j grab_bubbles_finished
+    nop
+
+grab_start:
+    # Remember the colour being collected
+    sw $t5, held_colour
+
+    # Initialize number of collected bubbles
+    li $t6, 0
+
+grab_matching_loop:
+    # Stop when the next bubble has a different colour
+    lw $t7, 0($t1)
+    bne $t7, $t5, grab_finish
+    nop
+
+    # Remove matching bubble
+    sw $zero, 0($t1)
+
+    # Increment collected count
+    addiu $t6, $t6, 1
+
+    # Move one row upward
+    addiu $t1, $t1, -28
+    addiu $t2, $t2, -1
+
+    bgez $t2, grab_matching_loop
+    nop
+
+grab_finish:
+    # Store the number of collected bubbles
+    sw $t6, held_count
+
+    # Redraw the board after grabbing
+    jal draw_board
+    nop
+
+grab_bubbles_finished:
+    lw $ra, 4($sp)
+    addiu $sp, $sp, 8
+
+    jr $ra
+    nop
+
+##############################################################################
 # KEYBOARD OPS
 ##############################################################################
 
@@ -839,6 +930,10 @@ handle_D_press:
     nop
     
 handle_S_press:
+    # Grab bubbles from the player's current column
+    jal grab_bubbles
+    nop
+
     j handle_key_finished
     nop
     
