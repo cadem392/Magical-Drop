@@ -102,6 +102,11 @@ game_over:
 board:
     .space 392              # 98 cells * 4 bytes = 392 bytes
 
+# One byte per board cell.
+# 0 = not matched, 1 = matched
+match_marks:
+    .space 98
+
 ##############################################################################
 # Code
 ##############################################################################
@@ -474,6 +479,193 @@ game_over_reached:
     jr $ra
     nop
 
+##############################################################################
+# DETECT VERTICAL MATCHES
+##############################################################################
+
+detect_vertical_matches:
+    # Find all vertical matches of 3 or more bubbles.
+    # Mark matching cells without removing them yet.
+
+    # Clear all 98 match markers.
+    la $t0, match_marks
+    li $t1, 98
+
+clear_match_marks_loop:
+    sb $zero, 0($t0)
+    addiu $t0, $t0, 1
+    addiu $t1, $t1, -1
+
+    bgtz $t1, clear_match_marks_loop
+    nop
+
+    # Prepare board and marker addresses.
+    la $t0, board
+    la $t1, match_marks
+
+    li $t2, 0                  # Current row
+
+detect_match_row_loop:
+    li $t3, 0                  # Current column
+
+detect_match_col_loop:
+    # Calculate cell index = row * 7 + column.
+    li $t4, PLAYFIELD_COLS
+    mul $t5, $t2, $t4
+    addu $t5, $t5, $t3
+
+    # Calculate address of first bubble.
+    sll $t6, $t5, 2
+    addu $t7, $t0, $t6
+
+    # Load the first bubble's colour.
+    lw $t8, 0($t7)
+
+    # Empty cells cannot form matches.
+    beq $t8, $zero, detect_match_next_col
+    nop
+
+    # Compare with bubble one row below.
+    lw $t9, 28($t7)
+    bne $t8, $t9, detect_match_next_col
+    nop
+
+    # Compare with bubble two rows below.
+    lw $t9, 56($t7)
+    bne $t8, $t9, detect_match_next_col
+    nop
+
+    # Three matching bubbles found.
+    # Mark all three cells.
+    addu $t7, $t1, $t5
+    li $t9, 1
+
+    sb $t9, 0($t7)
+    sb $t9, 7($t7)
+    sb $t9, 14($t7)
+
+detect_match_next_col:
+    # Move to the next column.
+    addiu $t3, $t3, 1
+
+    li $t4, PLAYFIELD_COLS
+    blt $t3, $t4, detect_match_col_loop
+    nop
+
+    # Move to the next row.
+    addiu $t2, $t2, 1
+
+    # Last starting row is 11 (rows 11, 12, 13).
+    li $t4, PLAYFIELD_ROWS
+    addiu $t4, $t4, -2
+
+    blt $t2, $t4, detect_match_row_loop
+    nop
+
+    jr $ra
+    nop
+
+##############################################################################
+# REMOVE MATCHED BUBBLES
+##############################################################################
+
+remove_marked_bubbles:
+    # Remove all bubbles marked by detect_vertical_matches.
+    # Redraw the board only if at least one bubble was removed.
+    # Return the number of removed bubbles in $v0.
+
+    addiu $sp, $sp, -20
+    sw $ra, 16($sp)
+    sw $s0, 12($sp)
+    sw $s1, 8($sp)
+    sw $s2, 4($sp)
+    sw $s3, 0($sp)
+
+    # Initialize pointers
+    la $s0, board
+    la $s1, match_marks
+
+    # Total number of board cells
+    li $s2, 98
+
+    # Number of removed bubbles
+    li $s3, 0
+
+remove_marked_loop:
+    # Read the match marker
+    lbu $t0, 0($s1)
+
+    # Skip cells that are not marked
+    beq $t0, $zero, remove_marked_next
+    nop
+
+    # Remove the bubble by setting its cell to empty
+    sw $zero, 0($s0)
+
+    # Count the removed bubble
+    addiu $s3, $s3, 1
+
+remove_marked_next:
+    # Move to the next board cell
+    addiu $s0, $s0, 4
+
+    # Move to the next match marker
+    addiu $s1, $s1, 1
+
+    # Decrease remaining cell count
+    addiu $s2, $s2, -1
+
+    bgtz $s2, remove_marked_loop
+    nop
+
+    # Only redraw if bubbles were removed
+    beq $s3, $zero, remove_marked_finished
+    nop
+
+    jal draw_board
+    nop
+
+remove_marked_finished:
+    # Return number of removed bubbles
+    move $v0, $s3
+
+    # Restore registers
+    lw $s3, 0($sp)
+    lw $s2, 4($sp)
+    lw $s1, 8($sp)
+    lw $s0, 12($sp)
+    lw $ra, 16($sp)
+    addiu $sp, $sp, 20
+
+    jr $ra
+    nop
+
+##############################################################################
+# PROCESS VERTICAL MATCHES
+##############################################################################
+
+process_vertical_matches:
+    # Detect and remove all vertical matches of 3+ bubbles.
+    # Returns the number of removed bubbles in $v0.
+
+    addiu $sp, $sp, -8
+    sw $ra, 4($sp)
+
+    # Find and mark all vertical matches
+    jal detect_vertical_matches
+    nop
+
+    # Remove marked bubbles and redraw the board
+    jal remove_marked_bubbles
+    nop
+
+    # Restore return address
+    lw $ra, 4($sp)
+    addiu $sp, $sp, 8
+
+    jr $ra
+    nop
+
 get_colour:
     # Return the colour word from bubble_palette from id value
     la $t0, bubble_palette
@@ -729,7 +921,11 @@ count_wave_key:
     jal advance_bubble_rows
     nop
 
-    # Check if bubbles reached the bottom after shifting
+    # Detect and remove vertical matches after row advancement
+    jal process_vertical_matches
+    nop
+
+    # Check if bubbles reached the bottom after matching
     jal check_game_over
     nop
 
