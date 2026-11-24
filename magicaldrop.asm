@@ -2,7 +2,7 @@
 # This file contains our implementation of Magical Drop.
 #
 # Student 1: Cade McNelly, 1011958419
-# Student 2: Name, Student Number (if applicable)
+# Student 2: Jay Bharat Mehta, 1011744230
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
@@ -19,7 +19,7 @@
 .eqv PLAYFIELD_ROWS  14
 
 .eqv FRAME_COLS 9
-.eqv FRAME_ROWS 17
+.eqv FRAME_ROWS 32
 
 .eqv BITMAP_SIZE_UNITS 32
 
@@ -43,7 +43,7 @@
 .eqv PLAYER_HELD_COUNT_OFFSET   12
 .eqv PLAYER_STATE_SIZE          16
 
-.eqv PLAYER_ROW                 15
+.eqv PLAYER_ROW                 30
 .eqv MOVES_PER_WAVE             10
 
     .data
@@ -716,46 +716,92 @@ draw_unit:
 ##############################################################################
 
 draw_player:
-    # Draw the player without leaving trails.
-    # Clear the player row, then draw the current position.
+    # Draw the player and all held bubbles vertically.
+    # The stack grows upward from the player.
 
-    addiu $sp, $sp, -8
-    sw $ra, 4($sp)
-    sw $s0, 0($sp)
+    addiu $sp, $sp, -20
+    sw $ra, 16($sp)
+    sw $s0, 12($sp)
+    sw $s1, 8($sp)
+    sw $s2, 4($sp)
+    sw $s3, 0($sp)
 
-    # Clear all 7 playable cells in the player row.
-    li $s0, 0
+    # Clear the reserved holding area and player row.
+    # Board rows 1-14 must remain untouched.
+    li $s0, 16
 
-clear_player_row:
-    li $a0, PLAYER_ROW
-    addiu $a1, $s0, 1
+draw_player_clear_row:
+    li $s1, 0
+
+draw_player_clear_col:
+    move $a0, $s0
+    addiu $a1, $s1, 1
     li $a2, CELL_EMPTY
 
     jal draw_unit
     nop
 
-    addiu $s0, $s0, 1
-
+    addiu $s1, $s1, 1
     li $t0, PLAYFIELD_COLS
-    blt $s0, $t0, clear_player_row
+    blt $s1, $t0, draw_player_clear_col
     nop
 
-    # Load the player's current column.
-    la $t0, player_state
-    lw $t1, PLAYER_COL_OFFSET($t0)
+    addiu $s0, $s0, 1
+    li $t0, PLAYER_ROW
+    addiu $t0, $t0, 1
+    blt $s0, $t0, draw_player_clear_row
+    nop
 
-    # Draw the player at the current position.
+    # Load player's column.
+    lw $s1, player_col
+
+    # Draw pink player at row 30.
     li $a0, PLAYER_ROW
-    addiu $a1, $t1, 1
+    addiu $a1, $s1, 1
     li $a2, CELL_PLAYER
 
     jal draw_unit
     nop
 
-    # Restore registers.
-    lw $s0, 0($sp)
-    lw $ra, 4($sp)
-    addiu $sp, $sp, 8
+    # Load number and colour of held bubbles.
+    lw $s2, held_count
+    lw $s3, held_colour
+
+    # Nothing to display if no bubbles are held.
+    beq $s2, $zero, draw_player_finished
+    nop
+
+    beq $s3, $zero, draw_player_finished
+    nop
+
+    # Start immediately above the player.
+    li $s0, PLAYER_ROW
+    addiu $s0, $s0, -1
+
+draw_player_held_loop:
+    # Draw one held bubble in the player's column.
+    move $a0, $s0
+    addiu $a1, $s1, 1
+    move $a2, $s3
+
+    jal draw_unit
+    nop
+
+    # Move upward and decrease remaining count.
+    addiu $s0, $s0, -1
+    addiu $s2, $s2, -1
+
+    bgtz $s2, draw_player_held_loop
+    nop
+
+draw_player_finished:
+    # Restore saved registers.
+    lw $s3, 0($sp)
+    lw $s2, 4($sp)
+    lw $s1, 8($sp)
+    lw $s0, 12($sp)
+    lw $ra, 16($sp)
+    addiu $sp, $sp, 20
 
     jr $ra
     nop
@@ -772,11 +818,6 @@ grab_bubbles:
 
     addiu $sp, $sp, -8
     sw $ra, 4($sp)
-
-    # Cannot grab if already holding bubbles
-    lw $t0, held_count
-    bne $t0, $zero, grab_bubbles_finished
-    nop
 
     # Get player's current column
     lw $t0, player_col
@@ -811,11 +852,22 @@ grab_find_bottom:
     nop
 
 grab_start:
+    # Load the number of bubbles already held
+    lw $t6, held_count
+
+    # If already holding bubbles, only grab the same colour
+    beq $t6, $zero, grab_colour_valid
+    nop
+
+    lw $t8, held_colour
+    bne $t5, $t8, grab_bubbles_finished
+    nop
+
+grab_colour_valid:
     # Remember the colour being collected
     sw $t5, held_colour
 
-    # Initialize number of collected bubbles
-    li $t6, 0
+    # Keep the existing held count and add new bubbles to it
 
 grab_matching_loop:
     # Stop when the next bubble has a different colour
@@ -847,6 +899,132 @@ grab_finish:
 grab_bubbles_finished:
     lw $ra, 4($sp)
     addiu $sp, $sp, 8
+
+    jr $ra
+    nop
+
+##############################################################################
+# THROW BUBBLES
+##############################################################################
+
+throw_bubbles:
+    # Throw held bubbles into the player's current column.
+    # Attach them beneath the lowest existing bubble.
+    # Do not throw if there is insufficient space.
+    # Return 1 on success, 0 otherwise.
+
+    addiu $sp, $sp, -24
+    sw $ra, 20($sp)
+    sw $s0, 16($sp)
+    sw $s1, 12($sp)
+    sw $s2, 8($sp)
+    sw $s3, 4($sp)
+    sw $s4, 0($sp)
+
+    # Read held bubble state
+    lw $s0, held_count
+    lw $s1, held_colour
+
+    # Cannot throw without held bubbles
+    beq $s0, $zero, throw_failed
+    nop
+
+    beq $s1, $zero, throw_failed
+    nop
+
+    # Get the player's current column
+    lw $s2, player_col
+
+    # Start searching from the bottom row
+    la $s4, board
+    li $s3, PLAYFIELD_ROWS
+    addiu $s3, $s3, -1
+
+throw_find_stack:
+    # If no occupied cell was found, column is empty
+    bltz $s3, throw_position_found
+    nop
+
+    # Calculate address of board[row][player_col]
+    li $t0, PLAYFIELD_COLS
+    mul $t1, $s3, $t0
+    addu $t1, $t1, $s2
+    sll $t1, $t1, 2
+    addu $t2, $s4, $t1
+
+    # Check whether this cell contains a bubble
+    lw $t3, 0($t2)
+    bne $t3, $zero, throw_position_found
+    nop
+
+    # Continue searching upward
+    addiu $s3, $s3, -1
+    j throw_find_stack
+    nop
+
+throw_position_found:
+    # Place bubbles in the next row below the stack
+    # For an empty column, -1 + 1 = row 0
+    addiu $s3, $s3, 1
+
+    # Check that all held bubbles will fit
+    addu $t0, $s3, $s0
+    li $t1, PLAYFIELD_ROWS
+
+    bgt $t0, $t1, throw_failed
+    nop
+
+    # Calculate first placement address
+    li $t0, PLAYFIELD_COLS
+    mul $t1, $s3, $t0
+    addu $t1, $t1, $s2
+    sll $t1, $t1, 2
+    addu $s4, $s4, $t1
+
+throw_place_loop:
+    # Place one held bubble
+    sw $s1, 0($s4)
+
+    # Move one row downward in memory
+    addiu $s4, $s4, 28
+    addiu $s0, $s0, -1
+
+    bgtz $s0, throw_place_loop
+    nop
+
+    # Clear held state after successful throw
+    sw $zero, held_colour
+    sw $zero, held_count
+
+    # Remove the held indicator from the player
+    jal draw_player
+    nop
+
+    # Immediately detect and remove vertical matches
+    jal process_vertical_matches
+    nop
+
+    # Redraw the final board state
+    jal draw_board
+    nop
+
+    # Return successful throw
+    li $v0, 1
+    j throw_finished
+    nop
+
+throw_failed:
+    # Keep held bubbles unchanged if throwing failed
+    move $v0, $zero
+
+throw_finished:
+    lw $s4, 0($sp)
+    lw $s3, 4($sp)
+    lw $s2, 8($sp)
+    lw $s1, 12($sp)
+    lw $s0, 16($sp)
+    lw $ra, 20($sp)
+    addiu $sp, $sp, 24
 
     jr $ra
     nop
@@ -892,6 +1070,10 @@ handle_key:
     li $t0, KEY_S
     beq $t0, $a0, handle_S_press
     nop
+
+    li $t0, KEY_W
+    beq $t0, $a0, handle_W_press
+    nop
     
     li $t0, KEY_Q
     beq $t0, $a0, handle_Q_press
@@ -934,9 +1116,21 @@ handle_S_press:
     jal grab_bubbles
     nop
 
+    # Update the player and held bubble indicator
+    jal draw_player
+    nop
+
     j handle_key_finished
     nop
-    
+
+handle_W_press:
+    # Throw held bubbles into the current column
+    jal throw_bubbles
+    nop
+
+    j handle_key_finished
+    nop
+
 handle_Q_press:
     # Quit the game when Q is pressed
     j game_over_exit
@@ -1017,11 +1211,7 @@ count_wave_key:
     jal advance_bubble_rows
     nop
 
-    # Detect and remove vertical matches after row advancement
-    jal process_vertical_matches
-    nop
-
-    # Check if bubbles reached the bottom after matching
+    # Check if bubbles reached the bottom
     jal check_game_over
     nop
 
