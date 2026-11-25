@@ -19,9 +19,10 @@
 .eqv PLAYFIELD_ROWS  14
 
 .eqv FRAME_COLS 9
-.eqv FRAME_ROWS 32
+.eqv FRAME_ROWS 16
 
-.eqv BITMAP_SIZE_UNITS 32
+.eqv BITMAP_SIZE_UNITS 64
+.eqv CELL_SCALE 3
 
 .eqv CELL_EMPTY      0
 .eqv CELL_RED        1
@@ -43,7 +44,7 @@
 .eqv PLAYER_HELD_COUNT_OFFSET   12
 .eqv PLAYER_STATE_SIZE          16
 
-.eqv PLAYER_ROW                 30
+.eqv PLAYER_ROW                 14
 .eqv MOVES_PER_WAVE             10
 
     .data
@@ -600,7 +601,8 @@ remove_marked_loop:
     nop
 
     # Remove the bubble by setting its cell to empty
-    sw $zero, 0($s0)
+    sw $zero, 0($s0)    # Clear the board cell
+    sb $zero, 0($s1)    # Clear its match marker
 
     # Count the removed bubble
     addiu $s3, $s3, 1
@@ -644,25 +646,80 @@ remove_marked_finished:
 # PROCESS VERTICAL MATCHES
 ##############################################################################
 
-process_vertical_matches:
-    # Detect and remove all vertical matches of 3+ bubbles.
-    # Returns the number of removed bubbles in $v0.
-
-    addiu $sp, $sp, -8
-    sw $ra, 4($sp)
-
-    # Find and mark all vertical matches
-    jal detect_vertical_matches
+process_neighbouring_matches:
+    # Detect and remove all matches of 3+ bubbles of the same colour
+    # $a0 = board row, $a1 = board column, $a2 = target colour
+    
+    # Unsigned comparisons also reject negative rows and columns.
+    sltiu $t0, $a0, PLAYFIELD_ROWS
+    beq   $t0, $zero, neighbour_done
+    nop
+    sltiu $t0, $a1, PLAYFIELD_COLS
+    beq   $t0, $zero, neighbour_done
     nop
 
-    # Remove marked bubbles and redraw the board
-    jal remove_marked_bubbles
+    # Board uses words. match_marks uses one byte per cell.
+    li   $t0, PLAYFIELD_COLS
+    mul  $t1, $a0, $t0
+    addu $t1, $t1, $a1         # Cell index
+
+    la   $t2, board
+    sll  $t3, $t1, 2
+    addu $t2, $t2, $t3
+    lw   $t4, 0($t2)
+    bne  $t4, $a2, neighbour_done
     nop
 
-    # Restore return address
-    lw $ra, 4($sp)
-    addiu $sp, $sp, 8
+    la   $t2, match_marks
+    addu $t2, $t2, $t1
+    lbu  $t4, 0($t2)
+    bne  $t4, $zero, neighbour_done
+    nop
 
+    li $t4, 1
+    sb $t4, 0($t2)             # Mark before visiting neighbours
+
+    addiu $sp, $sp, -16
+    sw    $ra, 12($sp)
+    sw    $s0, 8($sp)
+    sw    $s1, 4($sp)
+    sw    $s2, 0($sp)
+
+    move $s0, $a0              # Save this cell's row, column, colour
+    move $s1, $a1
+    move $s2, $a2
+
+    addiu $a0, $s0, -1         # Up
+    move  $a1, $s1
+    move  $a2, $s2
+    jal   process_neighbouring_matches
+    nop
+
+    addiu $a0, $s0, 1          # Down
+    move  $a1, $s1
+    move  $a2, $s2
+    jal   process_neighbouring_matches
+    nop
+
+    move  $a0, $s0             # Left
+    addiu $a1, $s1, -1
+    move  $a2, $s2
+    jal   process_neighbouring_matches
+    nop
+
+    move  $a0, $s0             # Right
+    addiu $a1, $s1, 1
+    move  $a2, $s2
+    jal   process_neighbouring_matches
+    nop
+
+    lw    $s2, 0($sp)
+    lw    $s1, 4($sp)
+    lw    $s0, 8($sp)
+    lw    $ra, 12($sp)
+    addiu $sp, $sp, 16
+
+neighbour_done:
     jr $ra
     nop
 
@@ -677,39 +734,53 @@ get_colour:
     nop
 
 draw_unit:
-    # $a0 = row
-    # $a1 = column
-    # $a2 = cell ID
+    # $a0 = logical row, $a1 = logical column, $a2 = cell ID
+    addiu $sp, $sp, -16
+    sw    $ra, 12($sp)
+    sw    $a0, 8($sp)
+    sw    $a1, 4($sp)
 
-    addi $sp, $sp, -16
-    sw   $ra, 12($sp)
-    sw   $a0, 8($sp)         # Save row
-    sw   $a1, 4($sp)         # Save column
-    sw   $a2, 0($sp)         # Save cell ID
-    
-    move $a0, $a2            # Move cell ID into $a0 for get_colour
-    
-    jal get_colour           # $v0 now hold the colour corresponding to cell ID
-    
-    lw $t0, 8($sp)           # Restore row
-    lw $t1, 4($sp)           # Restore column
-    
-    # Calculate bitmap position:
-    # index = row * display_width + column
-    li   $t2, BITMAP_SIZE_UNITS
-    mul  $t3, $t0, $t2
-    addu $t3, $t3, $t1
-    sll  $t3, $t3, 2         # Shift left by 2 to preserve the 4 byte size
-    
-    lw $t4, ADDR_DSPL
-    
-    addu $t4, $t4, $t3
-    sw $v0, 0($t4)          # Write the colour to the bitmap position
-    
-    lw   $ra, 12($sp)
-    addi $sp, $sp, 16
-    
-    jr $ra
+    move $a0, $a2
+    jal  get_colour
+    nop                         # $v0 holds RGB for the entire square
+
+    lw   $t0, 8($sp)            # Logical row
+    lw   $t1, 4($sp)            # Logical column
+    li   $t2, BITMAP_SIZE_UNITS # Bitmap width in units
+    li   $t4, CELL_SCALE        # Must be at least 1
+
+    # Byte offset = 4 * ((row * scale) * width + col * scale)
+    mul  $t0, $t0, $t4
+    mul  $t1, $t1, $t4
+    mul  $t0, $t0, $t2
+    addu $t0, $t0, $t1
+    sll  $t0, $t0, 2
+
+    lw   $t3, ADDR_DSPL
+    addu $t3, $t3, $t0           # Address of first unit in current row
+    sll  $t2, $t2, 2            # Bytes per bitmap row
+    move $t5, $t4               # Rows left to draw
+
+draw_unit_row_loop:
+    move $t6, $t3               # Start at this row's left edge
+    move $t7, $t4               # Reset columns left for each row
+
+draw_unit_col_loop:
+    sw    $v0, 0($t6)
+    addiu $t6, $t6, 4           # One unit right
+    addiu $t7, $t7, -1
+    bgtz  $t7, draw_unit_col_loop
+    nop
+
+    addu  $t3, $t3, $t2         # One bitmap row down, same column
+    addiu $t5, $t5, -1
+    bgtz  $t5, draw_unit_row_loop
+    nop
+
+    lw    $ra, 12($sp)
+    addiu $sp, $sp, 16
+    jr    $ra
+    nop
     
 ##############################################################################
 # PLAYER OPS
@@ -1001,11 +1072,35 @@ throw_place_loop:
     nop
 
     # Immediately detect and remove vertical matches
-    jal process_vertical_matches
+    # $s4 - 28 = last bubble placed, which already has colour $s1.
+    # $s4 - 56 = one row above it.
+    # $s4 - 84 = two rows above it.
+    addiu $t0, $s4, -84
+    la    $t1, board
+    sltu  $t2, $t0, $t1
+    bne   $t2, $zero, throw_redraw   # Fewer than 3 rows available
     nop
 
-    # Redraw the final board state
-    jal draw_board
+    lw    $t2, 0($t0)
+    bne   $t2, $s1, throw_redraw
+    nop
+
+    lw    $t2, 28($t0)
+    bne   $t2, $s1, throw_redraw
+    nop
+
+    # Confirmed a vertical triple. Fill from the first bubble placed.
+    move  $a0, $s3
+    move  $a1, $s2
+    move  $a2, $s1
+    jal   process_neighbouring_matches
+    nop
+
+    jal   remove_marked_bubbles
+    nop
+
+throw_redraw:
+    jal   draw_board
     nop
 
     # Return successful throw
@@ -1092,6 +1187,9 @@ handle_A_press:
     addi $t1, $t1, -1
     sw   $t1, PLAYER_COL_OFFSET($t0)
     
+    jal count_wave_key
+    nop
+    
     j handle_key_finished
     nop
     
@@ -1108,6 +1206,9 @@ handle_D_press:
     addi $t1, $t1, 1
     sw   $t1, PLAYER_COL_OFFSET($t0)
     
+    jal count_wave_key
+    nop
+    
     j handle_key_finished
     nop
     
@@ -1119,6 +1220,9 @@ handle_S_press:
     # Update the player and held bubble indicator
     jal draw_player
     nop
+    
+    jal count_wave_key
+    nop
 
     j handle_key_finished
     nop
@@ -1126,6 +1230,9 @@ handle_S_press:
 handle_W_press:
     # Throw held bubbles into the current column
     jal throw_bubbles
+    nop
+    
+    jal count_wave_key
     nop
 
     j handle_key_finished
@@ -1148,30 +1255,13 @@ game_loop:
     # 1a. Check if key has been pressed
     jal check_keyboard_inputs
     nop
-
-    # Save the key so we can use it after handle_key
-    move $s0, $v0
+    
+    beq $v0, $zero, game_loop_continue  # Skip to the existing sleep
+    nop
 
     # 1b. Check which key has been pressed
-    move $a0, $s0
+    move $a0, $v0
     jal handle_key
-    nop
-
-    # Count only gameplay keys (A, D, S, W)
-    li $t0, KEY_A
-    beq $s0, $t0, count_wave_key
-    nop
-
-    li $t0, KEY_D
-    beq $s0, $t0, count_wave_key
-    nop
-
-    li $t0, KEY_S
-    beq $s0, $t0, count_wave_key
-    nop
-
-    li $t0, KEY_W
-    beq $s0, $t0, count_wave_key
     nop
 
     # Ignore other keys
@@ -1224,6 +1314,7 @@ count_wave_key:
 
 save_wave_count:
     sw $t0, moves_since_last_wave
+    jr $ra
 
 game_loop_draw:
     # 2a. Check for collisions
@@ -1231,12 +1322,10 @@ game_loop_draw:
     # 3. Draw the screen
 
     # Only redraw the player after A or D
-    li $t0, KEY_A
-    beq $s0, $t0, repaint_player
+    jal draw_board
     nop
 
-    li $t0, KEY_D
-    beq $s0, $t0, repaint_player
+    jal draw_player
     nop
 
     j game_loop_continue
@@ -1249,9 +1338,6 @@ repaint_player:
 game_loop_continue:
     # 4a. Refresh the bubble board
     # The player is drawn separately to avoid flickering.
-    jal draw_board
-    nop
-
     # 4b. Sleep approximately 16 milliseconds
     # This targets roughly 60 updates per second.
     li $v0, 32
