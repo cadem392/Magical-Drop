@@ -360,6 +360,8 @@ board:
 match_marks:
     .space 98                           # One byte per board cell, in the same order as board.
 
+    .include "observatory-mural-data.asm"
+
 ##############################################################################
 # 05 | Startup
 ##############################################################################
@@ -370,6 +372,9 @@ match_marks:
 
 main:
     jal initialize_board                # Clear the board and seed its starting rows.
+    nop
+    
+    jal draw_mural                      # Draw mural background
     nop
 
     jal draw_frame                      # Draw the static border.
@@ -631,6 +636,49 @@ draw_sprite_next_pixel:
 draw_sprite_done:
     jr    $ra
     nop
+    
+restore_mural_tile:
+    # $a0 = logical screen row, $a1 = logical screen column
+    # The caller already accounts for the frame border.
+    sll   $t0, $a0, 4          # Bitmap y = row * 16
+    sll   $t0, $t0, 8          # y * 256
+    sll   $t1, $a1, 4          # Bitmap x = col * 16
+    addu  $t0, $t0, $t1        # Pixel index = y * 256 + x
+
+    la    $t1, art_mural_pixels
+    addu  $t1, $t1, $t0        # Source byte pointer
+
+    lw    $t2, ADDR_DSPL
+    sll   $t0, $t0, 2
+    addu  $t2, $t2, $t0        # Destination word pointer
+
+    la    $t3, art_mural_pal
+    li    $t4, 16              # Rows left
+
+restore_mural_row:
+    li    $t5, 16              # Pixels left in this row
+
+restore_mural_pixel:
+    lbu   $t6, 0($t1)          # Index 0 is also a mural colour
+    sll   $t6, $t6, 2
+    addu  $t6, $t3, $t6
+    lw    $t6, 0($t6)
+    sw    $t6, 0($t2)
+
+    addiu $t1, $t1, 1
+    addiu $t2, $t2, 4
+    addiu $t5, $t5, -1
+    bgtz  $t5, restore_mural_pixel
+    nop
+
+    addiu $t1, $t1, 240        # Skip the other 256 - 16 source pixels
+    addiu $t2, $t2, 960        # Same skip in framebuffer bytes
+    addiu $t4, $t4, -1
+    bgtz  $t4, restore_mural_row
+    nop
+
+    jr    $ra
+    nop
 
 draw_bubble:
     # $a0 = logical screen row, $a1 = logical screen column
@@ -648,59 +696,76 @@ draw_bubble:
 
     j     draw_sprite
     nop
-
+    
 draw_board:
+    addiu $sp, $sp, -16
+    sw    $ra, 12($sp)
+    sw    $s0, 8($sp)
+    sw    $s1, 4($sp)
+    sw    $s2, 0($sp)
 
-    addiu $sp, $sp, -16                 # Save $ra plus row, column, and board cursor registers.
-    sw $ra, 12($sp)
-    sw $s0, 8($sp)
-    sw $s1, 4($sp)
-    sw $s2, 0($sp)
-
-    la $s2, board                       # $s2 = cursor over board words in row-major order.
-    li $s0, 0                           # $s0 = logical board row.
+    la    $s2, board             # Pointer to the current board cell
+    li    $s0, 0                 # Board row
 
 draw_board_row:
-    li $s1, 0                           # $s1 = logical board column, reset for each row.
+    li    $s1, 0                 # Board column
 
 draw_board_col:
-    addiu $a0, $s0, 1           # Logical screen row
-    addiu $a1, $s1, 1           # Logical screen column
-    li    $a2, CELL_EMPTY
-    jal   draw_unit              # Clear this tile to black
+    addiu $a0, $s0, 1            # Screen row, including top border
+    addiu $a1, $s1, 1            # Screen column, including left border
+    
+    jal restore_mural_tile
     nop
 
-    lw    $a2, 0($s2)           # Load the bubble colour after clearing
+    lw    $a2, 0($s2)            # Bubble colour ID
     beq   $a2, $zero, draw_board_next_col
     nop
 
-    addiu $a0, $s0, 1           # Set up the arguments again after draw_unit
+    addiu $a0, $s0, 1            # Reload coordinates after draw_unit
     addiu $a1, $s1, 1
     jal   draw_bubble
     nop
 
 draw_board_next_col:
-    addiu $s2, $s2, 4                   # Advance the board cursor by one word.
-    addiu $s1, $s1, 1                   # Advance the logical column.
-
-    li $t0, PLAYFIELD_COLS
-    blt $s1, $t0, draw_board_col
+    addiu $s2, $s2, 4            # Advance one board word
+    addiu $s1, $s1, 1            # Advance one column
+    li    $t0, PLAYFIELD_COLS
+    blt   $s1, $t0, draw_board_col
     nop
 
-    addiu $s0, $s0, 1                   # Advance the logical row.
-
-    li $t0, PLAYFIELD_ROWS
-    blt $s0, $t0, draw_board_row
+    addiu $s0, $s0, 1
+    li    $t0, PLAYFIELD_ROWS
+    blt   $s0, $t0, draw_board_row
     nop
 
-    lw $s2, 0($sp)
-    lw $s1, 4($sp)
-    lw $s0, 8($sp)
-    lw $ra, 12($sp)
+    lw    $s2, 0($sp)
+    lw    $s1, 4($sp)
+    lw    $s0, 8($sp)
+    lw    $ra, 12($sp)
     addiu $sp, $sp, 16
-
-    jr $ra
+    jr    $ra
     nop
+
+draw_mural:
+    la    $t0, art_mural_pixels
+    la    $t1, art_mural_pixels_end
+    la    $t2, art_mural_pal
+    lw    $t3, ADDR_DSPL
+
+draw_mural_loop:
+    lbu   $t4, 0($t0)       # One palette index
+    sll   $t4, $t4, 2       # Four bytes per palette entry
+    addu  $t4, $t2, $t4
+    lw    $t5, 0($t4)
+    sw    $t5, 0($t3)
+
+    addiu $t0, $t0, 1       # Next source byte
+    addiu $t3, $t3, 4       # Next framebuffer word
+    bne   $t0, $t1, draw_mural_loop
+    nop
+    jr    $ra
+    nop
+    
 
 ##############################################################################
 # 09 | Wave advancement and bottom-row check
@@ -1533,7 +1598,6 @@ save_wave_count:
 # interior row. The sleep path also serves idle input polls.
 
 game_loop_draw:
-
     jal draw_board                      # Paint board cells first, restoring the previous overlay area.
     nop
 
