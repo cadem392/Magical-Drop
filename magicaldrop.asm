@@ -29,8 +29,8 @@
 .eqv FRAME_COLS 9                       # Frame width, including both side borders.
 .eqv FRAME_ROWS 16                      # Frame height, including top and bottom borders.
 
-.eqv BITMAP_SIZE_UNITS 64               # Addressable bitmap units per row.
-.eqv CELL_SCALE 3                       # Draw each logical cell as a 3 x 3 bitmap block.
+.eqv BITMAP_SIZE_UNITS 256               # Addressable bitmap units per row.
+.eqv CELL_SCALE 16                       # Draw each logical cell as a 3 x 3 bitmap block.
 
 # Colour IDs are palette indices. The board uses CELL_EMPTY and the four bubble colours.
 .eqv CELL_EMPTY      0
@@ -64,7 +64,8 @@
 # Device addresses and the RGB palette come first, followed by mutable state.
 
     .data
-
+    .space 229376
+    .align 2                            # Align the following words to a 4-byte boundary.
 ADDR_DSPL:
     .word 0x10008000                    # First word of the bitmap framebuffer.
 
@@ -81,7 +82,242 @@ bubble_palette:
     .word 0x00777777                    # CELL_FRAME: grey.
     .word 0x00ff00ba                    # CELL_PLAYER: pink.
 
-    .align 2                            # Align the following words to a 4-byte boundary.
+# -----------------------------------------------------------------------------
+# 16 x 16 sprite art
+# Sprite arrays contain 256 palette indices in row-major order. Read with lbu.
+# Skip index 0 for transparency. Each palette entry is a 0x00RRGGBB word.
+# -----------------------------------------------------------------------------
+
+    .align 2
+art_bubble_palette_table:
+    .word 0, art_bubble_red_pal, art_bubble_green_pal
+    .word art_bubble_blue_pal, art_bubble_yellow_pal
+
+# Ember
+art_bubble_red_pal:
+    .word 0x00000000, 0x00EB8084, 0x00EA7F83, 0x00E87E83, 0x00E77D82, 0x00E57D81
+    .word 0x00DB6572, 0x00DA6472, 0x00D86371, 0x00ED8185, 0x00FE8A87, 0x00EE626D
+    .word 0x00CB546A, 0x00CA5469, 0x00FFB6A3, 0x00DC4962, 0x00B44A63, 0x00FFF4DA
+    .word 0x00C55168, 0x00B04862, 0x00EE626D, 0x00AE4761, 0x00F9936B, 0x00EE626D
+    .word 0x00EE626D, 0x00EE626D, 0x00B83A58, 0x00AD4660, 0x00F9936B, 0x00FFF4BA
+    .word 0x00F9936B, 0x00EE626D, 0x00DC4962, 0x00AC4660, 0x00DC6673, 0x00F16F6C
+    .word 0x00F9936B, 0x00EE626D, 0x00F38A67, 0x00DC4962, 0x00AA455F, 0x00EE626D
+    .word 0x00FFF4BA, 0x00F38A67, 0x00FFF4BA, 0x00E25A63, 0x00A8445F, 0x00F16F6C
+    .word 0x00FFF4BA, 0x00FFF4BA, 0x00E25A63, 0x00FFF4BA, 0x00FFF4BA, 0x00C44E5B
+    .word 0x00C8557B, 0x00A7435E, 0x00CE556B, 0x00F38A67, 0x00FFF4BA, 0x00FFF4BA
+    .word 0x00C44E5B, 0x00DA5C80, 0x008E2D54, 0x00A5425D, 0x00F38A67, 0x00F38A67
+    .word 0x00F29172, 0x00913C5B, 0x00B74B64, 0x00903B5B, 0x00B24962
+
+# Verdant
+art_bubble_green_pal:
+    .word 0x00000000, 0x0065CD98, 0x0064CB98, 0x0063CA97, 0x0063C996, 0x0062C795
+    .word 0x0048B286, 0x0047B185, 0x0047AF84, 0x0066CE99, 0x0070DDA0, 0x0043BA86
+    .word 0x00349C7B, 0x00349B7A, 0x00ADF0AE, 0x00249B78, 0x002E896F, 0x00ECFFE4
+    .word 0x00329778, 0x002C866D, 0x0054C27F, 0x002C846C, 0x0054C27F, 0x0054C27F
+    .word 0x00E9FFAF, 0x0083D96B, 0x001B7F67, 0x002B836B, 0x0054C27F, 0x00E9FFAF
+    .word 0x00E9FFAF, 0x00E9FFAF, 0x0079CE66, 0x002B826B, 0x0048B386, 0x0054C27F
+    .word 0x00E9FFAF, 0x0083D96B, 0x00E9FFAF, 0x0079CE66, 0x002A816A, 0x0054C27F
+    .word 0x0083D96B, 0x0079CE66, 0x00E9FFAF, 0x003AA873, 0x00297F69, 0x0054C27F
+    .word 0x00E9FFAF, 0x0083D96B, 0x00E9FFAF, 0x003AA873, 0x00249B78, 0x001B7F67
+    .word 0x0031A794, 0x00297D68, 0x00359E7C, 0x003AA873, 0x00E9FFAF, 0x00249B78
+    .word 0x001B7F67, 0x0035B59C, 0x00196257, 0x00287C68, 0x003AA873, 0x00249B78
+    .word 0x0035B59C, 0x00276E60, 0x002F8B71, 0x00276D5F, 0x002E886F
+
+
+# Tide
+art_bubble_blue_pal:
+    .word 0x00000000, 0x006CA7E3, 0x006CA5E1, 0x006BA4E0, 0x006AA3DF, 0x006AA2DE
+    .word 0x005B8ED1, 0x005A8CD0, 0x00598CCF, 0x006DA8E4, 0x0071AEF0, 0x00588CDB
+    .word 0x004B79C1, 0x004B78C0, 0x009CD8F9, 0x00416EC6, 0x00456BB2, 0x00ECFBFF
+    .word 0x004975BD, 0x004368AF, 0x00588CDB, 0x004267AE, 0x007AC9EB, 0x007AC9EB
+    .word 0x007AC9EB, 0x00588CDB, 0x00385AB0, 0x004166AD, 0x007AC9EB, 0x00D8FEF7
+    .word 0x00D8FEF7, 0x00D8FEF7, 0x004E83CE, 0x004165AB, 0x005B8FD2, 0x007AC9EB
+    .word 0x00D8FEF7, 0x00619CDF, 0x004E83CE, 0x00416EC6, 0x004064AA, 0x00619CDF
+    .word 0x00619CDF, 0x0072BFE3, 0x004E83CE, 0x00416EC6, 0x003F63A9, 0x00588CDB
+    .word 0x007AC9EB, 0x00D8FEF7, 0x0072BFE3, 0x00D8FEF7, 0x004E83CE, 0x00385AB0
+    .word 0x00587BD1, 0x003F62A7, 0x004D7BC3, 0x004E83CE, 0x00D8FEF7, 0x00D8FEF7
+    .word 0x006FB8DC, 0x005C85DC, 0x002B478A, 0x003E61A6, 0x0072BFE3, 0x0072BFE3
+    .word 0x007CC7EB, 0x00375894, 0x00466DB4, 0x00375693, 0x00446AB1
+
+# Dawn
+art_bubble_yellow_pal:
+    .word 0x00000000, 0x00F2BF64, 0x00F1BD63, 0x00F0BC63, 0x00EFBB62, 0x00EEBA62
+    .word 0x00E3A54E, 0x00E2A44E, 0x00E1A34D, 0x00F3BF65, 0x00FFCA65, 0x00EFA844
+    .word 0x00D19748, 0x00D09648, 0x00FFDE86, 0x00D6963D, 0x00BC8443, 0x00FFF8DD
+    .word 0x00CD9246, 0x00B88041, 0x00EFA844, 0x00B77F41, 0x00F9CE7B, 0x00EFA844
+    .word 0x00EFA844, 0x00EFA844, 0x00B47836, 0x00B67E40, 0x00F2B252, 0x00FFFFCF
+    .word 0x00F2B252, 0x00EFA844, 0x00D6963D, 0x00B57D40, 0x00E5A64F, 0x00F2B252
+    .word 0x00FFFFCF, 0x00FFFFCF, 0x00DDA34D, 0x00D6963D, 0x00B47C3F, 0x00F9CE7B
+    .word 0x00FFFFCF, 0x00FFFFCF, 0x00FFFFCF, 0x00F1C779, 0x00B27B3E, 0x00EFA844
+    .word 0x00F2B252, 0x00FFFFCF, 0x00FFFFCF, 0x00DDA34D, 0x00D6963D, 0x00B47836
+    .word 0x00CE8A59, 0x00B17A3D, 0x00D39949, 0x00D6963D, 0x00DDA34D, 0x00D6963D
+    .word 0x00B47836, 0x00DF995C, 0x0095603B, 0x00B0793D, 0x00F1C779, 0x00D6963D
+    .word 0x00DF995C, 0x00A16D3F, 0x00BE8644, 0x00A06C3E, 0x00BB8242
+
+# Stargazer
+art_player_pal:
+    .word 0x00000000, 0x00221934, 0x0040316A, 0x006756AA, 0x00A38AE1, 0x00DFA557
+    .word 0x00B47760, 0x00F7BF8B, 0x00493E75, 0x00FFF8D4, 0x0097F5DC, 0x00FFD990
+    .word 0x00845036, 0x00545CA3, 0x00C2ADFB
+
+art_bubble_pixels:
+    .byte 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0
+    .byte 0, 0, 9, 1, 10, 10, 10, 10, 10, 11, 11, 11, 12, 13, 0, 0
+    .byte 0, 9, 10, 10, 10, 10, 14, 14, 10, 10, 11, 11, 11, 15, 16, 0
+    .byte 0, 1, 10, 10, 14, 17, 17, 14, 10, 11, 11, 11, 11, 15, 18, 0
+    .byte 1, 10, 10, 14, 17, 17, 17, 14, 10, 11, 11, 11, 11, 15, 15, 19
+    .byte 2, 10, 10, 14, 17, 17, 14, 10, 11, 11, 20, 11, 15, 15, 15, 21
+    .byte 3, 10, 10, 14, 17, 14, 10, 10, 22, 23, 24, 25, 15, 15, 26, 27
+    .byte 4, 10, 10, 14, 14, 10, 11, 28, 29, 30, 31, 32, 15, 15, 26, 33
+    .byte 34, 11, 10, 10, 11, 11, 35, 29, 36, 37, 38, 39, 15, 15, 26, 40
+    .byte 6, 11, 11, 11, 11, 41, 36, 29, 42, 43, 44, 45, 15, 26, 26, 46
+    .byte 7, 11, 11, 11, 11, 47, 48, 49, 43, 50, 51, 52, 53, 54, 26, 55
+    .byte 56, 11, 11, 11, 11, 11, 57, 58, 29, 51, 59, 60, 61, 26, 62, 63
+    .byte 0, 12, 15, 15, 15, 15, 39, 57, 64, 65, 66, 61, 26, 62, 67, 0
+    .byte 0, 68, 15, 15, 15, 15, 15, 15, 26, 26, 26, 26, 62, 62, 69, 0
+    .byte 0, 0, 16, 70, 26, 26, 26, 26, 26, 26, 62, 62, 67, 69, 0, 0
+    .byte 0, 0, 0, 0, 19, 21, 27, 33, 40, 46, 55, 63, 0, 0, 0, 0
+
+art_player_pixels:
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 11, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 9, 5, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 1, 5, 11, 12, 1, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 1, 5, 3, 5, 5, 1, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 1, 1, 14, 4, 3, 5, 1, 0, 0, 0, 0
+    .byte 0, 0, 0, 1, 1, 1, 4, 14, 3, 3, 3, 1, 1, 1, 0, 0
+    .byte 0, 1, 1, 4, 4, 3, 3, 5, 11, 5, 4, 4, 1, 1, 1, 0
+    .byte 1, 1, 4, 4, 3, 3, 11, 9, 11, 5, 14, 3, 3, 1, 1, 1
+    .byte 0, 0, 0, 1, 1, 6, 6, 7, 7, 7, 7, 3, 1, 0, 10, 0
+    .byte 0, 0, 0, 1, 6, 7, 1, 7, 1, 7, 6, 1, 1, 10, 9, 10
+    .byte 0, 0, 0, 1, 1, 6, 6, 12, 7, 7, 1, 1, 0, 0, 10, 1
+    .byte 0, 0, 1, 1, 1, 12, 11, 5, 11, 1, 3, 1, 1, 1, 11, 1
+    .byte 0, 1, 1, 7, 13, 3, 3, 11, 14, 4, 3, 7, 1, 1, 12, 1
+    .byte 0, 1, 7, 13, 3, 4, 13, 11, 5, 3, 4, 1, 7, 7, 5, 1
+    .byte 0, 0, 1, 1, 13, 8, 3, 1, 2, 3, 13, 8, 1, 1, 12, 1
+    .byte 0, 0, 1, 8, 8, 13, 1, 0, 0, 1, 8, 8, 13, 1, 5, 1
+    
+art_frame_pal:
+    .word 0x00000000, 0x0037243B, 0x00573225, 0x0082492F
+    .word 0x00AD622F, 0x00D28B42, 0x00F0B758, 0x00FFD882
+    .word 0x00FFF0AF, 0x00CA7738, 0x00EEA24A, 0x00603E7C
+    .word 0x009B72C2, 0x00E7C8FF
+
+# Straight rail, left to right.
+art_frame_horizontal:
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+    .byte 3, 3, 3, 3, 3, 3, 3, 7, 7, 3, 3, 3, 3, 3, 3, 3
+    .byte 5, 6, 6, 3, 3, 7, 7, 8, 8, 7, 7, 3, 3, 6, 6, 5
+    .byte 7, 7, 7, 6, 7, 8, 8, 6, 6, 8, 8, 7, 6, 7, 7, 7
+    .byte 3, 9, 7, 7, 8, 6, 4, 4, 4, 4, 6, 6, 7, 10, 9, 3
+    .byte 3, 7, 8, 8, 6, 4, 6, 6, 6, 6, 7, 7, 10, 9, 7, 3
+    .byte 7, 8, 6, 4, 9, 10, 7, 7, 7, 7, 10, 9, 4, 6, 8, 7
+    .byte 5, 6, 4, 3, 3, 9, 10, 10, 10, 10, 9, 3, 3, 4, 6, 5
+    .byte 3, 3, 3, 3, 3, 3, 3, 9, 9, 3, 3, 3, 3, 3, 3, 3
+    .byte 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+# Straight rail, top to bottom.
+art_frame_vertical:
+    .byte 0, 0, 0, 1, 3, 5, 7, 3, 3, 7, 5, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 6, 8, 7, 9, 7, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 4, 6, 8, 7, 7, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 3, 4, 8, 7, 6, 3, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 3, 9, 6, 8, 7, 3, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 9, 10, 4, 6, 8, 7, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 10, 7, 6, 4, 8, 7, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 9, 10, 7, 6, 4, 6, 8, 7, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 9, 10, 7, 6, 4, 6, 8, 7, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 10, 7, 6, 4, 8, 7, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 9, 10, 7, 6, 8, 7, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 3, 9, 7, 6, 7, 3, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 3, 4, 10, 7, 6, 3, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 4, 6, 9, 10, 7, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 6, 8, 7, 9, 7, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 5, 7, 3, 3, 7, 5, 3, 1, 0, 0, 0
+
+# Top-left corner connects right and down.
+art_frame_corner_tl:
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 6, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1
+    .byte 0, 0, 0, 1, 7, 6, 1, 0, 0, 0, 1, 4, 4, 3, 3, 3
+    .byte 0, 0, 1, 6, 7, 13, 7, 4, 1, 4, 3, 3, 3, 6, 6, 5
+    .byte 0, 0, 0, 1, 6, 12, 11, 5, 7, 7, 7, 7, 6, 7, 7, 7
+    .byte 0, 0, 0, 0, 2, 5, 7, 4, 7, 8, 8, 8, 6, 7, 9, 3
+    .byte 0, 0, 0, 0, 0, 3, 5, 7, 8, 6, 4, 4, 7, 9, 7, 3
+    .byte 0, 0, 0, 0, 0, 4, 3, 7, 8, 4, 3, 6, 7, 6, 8, 7
+    .byte 0, 0, 0, 0, 1, 3, 3, 7, 8, 4, 6, 7, 10, 3, 6, 5
+    .byte 0, 0, 0, 0, 4, 6, 6, 7, 7, 6, 10, 10, 10, 3, 3, 3
+    .byte 0, 0, 0, 0, 6, 6, 7, 10, 7, 8, 4, 3, 2, 1, 1, 1
+    .byte 0, 0, 0, 1, 6, 7, 10, 9, 7, 8, 6, 4, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 6, 7, 9, 7, 8, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 5, 7, 3, 3, 7, 5, 3, 1, 0, 0, 0
+
+# Top-right corner connects left and down.
+art_frame_corner_tr:
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0
+    .byte 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 6, 1, 0, 0, 0, 0
+    .byte 3, 3, 6, 6, 4, 1, 0, 0, 2, 6, 7, 7, 6, 1, 0, 0
+    .byte 5, 6, 7, 6, 6, 3, 4, 3, 5, 12, 13, 6, 1, 0, 0, 0
+    .byte 7, 7, 10, 7, 6, 3, 3, 5, 7, 11, 7, 1, 0, 0, 0, 0
+    .byte 3, 9, 9, 10, 7, 7, 7, 7, 4, 5, 4, 0, 0, 0, 0, 0
+    .byte 3, 7, 7, 7, 7, 8, 8, 8, 7, 7, 1, 0, 0, 0, 0, 0
+    .byte 7, 8, 8, 8, 6, 4, 4, 6, 8, 7, 4, 0, 0, 0, 0, 0
+    .byte 5, 6, 6, 4, 10, 6, 3, 4, 8, 7, 3, 1, 0, 0, 0, 0
+    .byte 3, 3, 4, 3, 10, 7, 6, 4, 8, 7, 3, 4, 0, 0, 0, 0
+    .byte 1, 1, 1, 2, 10, 10, 7, 7, 6, 6, 3, 4, 0, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 3, 6, 9, 7, 7, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 6, 8, 7, 9, 7, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 5, 7, 3, 3, 7, 5, 3, 1, 0, 0, 0
+
+# Bottom-right corner connects left and up.
+art_frame_corner_br:
+    .byte 0, 0, 0, 1, 3, 5, 7, 3, 3, 7, 5, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 6, 8, 7, 9, 7, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 4, 6, 8, 7, 9, 10, 7, 6, 1, 0, 0, 0
+    .byte 1, 1, 1, 2, 3, 4, 8, 7, 10, 7, 6, 6, 0, 0, 0, 0
+    .byte 3, 3, 3, 10, 10, 10, 6, 7, 7, 6, 6, 4, 0, 0, 0, 0
+    .byte 5, 6, 3, 10, 7, 6, 4, 8, 7, 3, 3, 1, 0, 0, 0, 0
+    .byte 7, 8, 6, 7, 6, 3, 4, 8, 7, 3, 4, 0, 0, 0, 0, 0
+    .byte 3, 7, 9, 7, 4, 4, 6, 8, 7, 5, 3, 0, 0, 0, 0, 0
+    .byte 3, 9, 7, 6, 8, 8, 8, 7, 4, 7, 5, 2, 0, 0, 0, 0
+    .byte 7, 7, 7, 6, 7, 7, 7, 7, 5, 11, 12, 6, 1, 0, 0, 0
+    .byte 5, 6, 6, 3, 3, 3, 4, 1, 4, 7, 13, 7, 6, 1, 0, 0
+    .byte 3, 3, 3, 4, 4, 1, 0, 0, 0, 1, 6, 7, 1, 0, 0, 0
+    .byte 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 6, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+# Bottom-left corner connects right and up.
+art_frame_corner_bl:
+    .byte 0, 0, 0, 1, 3, 5, 7, 3, 3, 7, 5, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 6, 7, 9, 7, 8, 6, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 1, 3, 6, 7, 7, 9, 6, 3, 3, 1, 0, 0, 0
+    .byte 0, 0, 0, 0, 4, 3, 6, 6, 7, 7, 10, 10, 2, 1, 1, 1
+    .byte 0, 0, 0, 0, 4, 3, 7, 8, 4, 6, 7, 10, 3, 4, 3, 3
+    .byte 0, 0, 0, 0, 1, 3, 7, 8, 4, 3, 6, 10, 4, 6, 6, 5
+    .byte 0, 0, 0, 0, 0, 4, 7, 8, 6, 4, 4, 6, 8, 8, 8, 7
+    .byte 0, 0, 0, 0, 0, 1, 7, 7, 8, 8, 8, 7, 7, 7, 7, 3
+    .byte 0, 0, 0, 0, 0, 4, 5, 4, 7, 7, 7, 7, 10, 9, 9, 3
+    .byte 0, 0, 0, 0, 1, 7, 11, 7, 5, 3, 3, 6, 7, 10, 7, 7
+    .byte 0, 0, 0, 1, 6, 13, 12, 5, 3, 4, 3, 6, 6, 7, 6, 5
+    .byte 0, 0, 1, 6, 7, 7, 6, 2, 0, 0, 1, 4, 6, 6, 3, 3
+    .byte 0, 0, 0, 0, 1, 6, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1
+    .byte 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+
+    .align 2
 
 ##############################################################################
 # 03 | Player and game state
@@ -162,8 +398,7 @@ draw_frame:
     sw   $s2, 0($sp)
 
     li   $s0, 0                         # $s0 = current logical screen row.
-    li   $s1, CELL_FRAME                # $s1 = border colour ID.
-    li   $s2, 0                         # $s2 = current column when drawing a full row.
+    li   $s1, 0                         # $s1 = column.
 
 frame_row_loop:
     beq $s0, $zero, frame_full_row      # Row 0 is the top border.
@@ -173,36 +408,70 @@ frame_row_loop:
 
     beq $s0, $t0, frame_full_row        # Fill the bottom border just like the top.
 
-    move $a0, $s0                       # $a0 = current screen row.
-    li   $a1, 0                         # $a1 = left border column.
-    move $a2, $s1                       # $a2 = border colour ID.
-    jal  draw_unit
+    move $a1, $s0                       # $a1 = current screen row.
+    sll  $a1, $a1, 4
+    li   $a0, 0                         # $a0 = left border column.
+    la   $a2, art_frame_vertical
+    la   $a3, art_frame_pal
+
+    jal  draw_sprite
     nop
 
-    move $a0, $s0                       # $a0 = same screen row.
-    li   $a1, FRAME_COLS
-    addi $a1, $a1, -1                   # $a1 = right border column (FRAME_COLS - 1).
-    move $a2, $s1                       # $a2 = border colour ID.
-    jal  draw_unit
+    move $a1, $s0                       # $a1 = same screen row.
+    sll  $a1, $a1, 4
+    li   $a0, FRAME_COLS
+    addi $a0, $a0, -1                   # $a0 = right border column (FRAME_COLS - 1).
+    sll  $a0, $a0, 4
+    la   $a2, art_frame_vertical
+    la   $a3, art_frame_pal
+
+    jal  draw_sprite
     nop
 
     j frame_next_row
     nop
 
 frame_full_row:
-    move $a0, $s0                       # $a0 = top or bottom border row.
-    move $a1, $s2                       # $a1 = current column within the full row.
-    move $a2, $s1                       # $a2 = border colour ID.
-    jal draw_unit
+    sll   $a0, $s1, 4               # Bitmap x = column × 16
+    sll   $a1, $s0, 4               # Bitmap y = row × 16
+    la    $a2, art_frame_horizontal # Default for middle columns
+
+    beq   $s1, $zero, frame_pick_left
     nop
 
-    addiu $s2, $s2, 1                   # Advance to the next column.
     li    $t0, FRAME_COLS
-    blt   $s2, $t0, frame_full_row
+    addiu $t0, $t0, -1
+    bne   $s1, $t0, frame_draw_tile
     nop
 
+    la    $a2, art_frame_corner_tr
+    beq   $s0, $zero, frame_draw_tile
+    nop
+    la    $a2, art_frame_corner_br
+    j     frame_draw_tile
+    nop
+
+frame_pick_left:
+    la    $a2, art_frame_corner_tl
+    beq   $s0, $zero, frame_draw_tile
+    nop
+    la    $a2, art_frame_corner_bl
+
+frame_draw_tile:
+    la    $a3, art_frame_pal
+    jal   draw_sprite
+    nop
+
+    addiu $s1, $s1, 1
+    li    $t0, FRAME_COLS
+    blt   $s1, $t0, frame_full_row
+    nop
+
+    j     frame_next_row
+    nop
+    
 frame_next_row:
-    li    $s2, 0                        # Reset the full-row column for later use.
+    li    $s1, 0                        # Reset the full-row column for later use.
     addiu $s0, $s0, 1                   # Advance to the next logical screen row.
 
     li  $t0, FRAME_ROWS
@@ -309,6 +578,77 @@ fill_bubble_loop:
 # draw_board walks every board cell, including empty cells. Adding one to
 # the logical row and column puts board cell (0, 0) inside the frame.
 
+draw_sprite:
+    # Draws a specific sprite
+    # $a0 = bitmap x, $a1 = bitmap y, $a2 = address of pixel list, $a3 = address of palette
+    
+    li    $t0, BITMAP_SIZE_UNITS
+    addiu $t1, $t0, -15         # Exclusive limit for x and y: 241 on 256x256
+    sltu  $t2, $a0, $t1
+    beq   $t2, $zero, draw_sprite_done
+    nop
+    sltu  $t2, $a1, $t1
+    beq   $t2, $zero, draw_sprite_done
+    nop
+    
+    # First destination = bitmap base + 4 * (y * bitmap width + x)
+    mul   $t1, $a1, $t0
+    addu  $t1, $t1, $a0
+    sll   $t1, $t1, 2
+    lw    $t2, ADDR_DSPL
+    addu  $t2, $t2, $t1         # $t2 = left edge of current destination row
+    sll   $t0, $t0, 2           # $t0 = bitmap row stride in bytes
+
+    move  $t3, $a2              # Source cursor through the pixel list
+    li    $t4, 16               # Rows left
+
+draw_sprite_row:
+    move  $t5, $t2              # Destination cursor for this row
+    li    $t6, 16               # Columns left
+
+draw_sprite_col:
+    lbu   $t7, 0($t3)           # Palette index for this pixel
+    beq   $t7, $zero, draw_sprite_next_pixel
+    nop
+
+    sll   $t8, $t7, 2           # Palette index × 4 bytes
+    addu  $t8, $a3, $t8
+    lw    $t9, 0($t8)           # Packed RGB colour
+    sw    $t9, 0($t5)
+
+draw_sprite_next_pixel:
+    addiu $t3, $t3, 1           # Next sprite byte
+    addiu $t5, $t5, 4           # Next bitmap word
+    addiu $t6, $t6, -1
+    bgtz  $t6, draw_sprite_col
+    nop
+
+    addu  $t2, $t2, $t0         # Next bitmap row, same x
+    addiu $t4, $t4, -1
+    bgtz  $t4, draw_sprite_row
+    nop
+
+draw_sprite_done:
+    jr    $ra
+    nop
+
+draw_bubble:
+    # $a0 = logical screen row, $a1 = logical screen column
+    # $a2 = bubble colour ID (1–4)
+
+    sll   $t0, $a2, 2           # Colour ID × 4 bytes per table entry
+    la    $t1, art_bubble_palette_table
+    addu  $t1, $t1, $t0
+    lw    $a3, 0($t1)           # Address of the selected colour palette
+
+    sll   $t0, $a0, 4           # Save bitmap y before replacing $a0
+    sll   $a0, $a1, 4           # Bitmap x = column × 16
+    move  $a1, $t0              # Bitmap y = row × 16
+    la    $a2, art_bubble_pixels
+
+    j     draw_sprite
+    nop
+
 draw_board:
 
     addiu $sp, $sp, -16                 # Save $ra plus row, column, and board cursor registers.
@@ -324,14 +664,22 @@ draw_board_row:
     li $s1, 0                           # $s1 = logical board column, reset for each row.
 
 draw_board_col:
-    lw $a2, 0($s2)                      # $a2 = current bubble colour ID (or CELL_EMPTY).
-
-    addiu $a0, $s0, 1                   # $a0 = screen row after the top border offset.
-    addiu $a1, $s1, 1                   # $a1 = screen column after the left border offset.
-
-    jal draw_unit
+    addiu $a0, $s0, 1           # Logical screen row
+    addiu $a1, $s1, 1           # Logical screen column
+    li    $a2, CELL_EMPTY
+    jal   draw_unit              # Clear this tile to black
     nop
 
+    lw    $a2, 0($s2)           # Load the bubble colour after clearing
+    beq   $a2, $zero, draw_board_next_col
+    nop
+
+    addiu $a0, $s0, 1           # Set up the arguments again after draw_unit
+    addiu $a1, $s1, 1
+    jal   draw_bubble
+    nop
+
+draw_board_next_col:
     addiu $s2, $s2, 4                   # Advance the board cursor by one word.
     addiu $s1, $s1, 1                   # Advance the logical column.
 
@@ -732,39 +1080,17 @@ draw_player:
     sw $s2, 4($sp)
     sw $s3, 0($sp)
 
-    # The legacy clear loop starts at row 16 and tests its limit after drawing a row.
-    # With PLAYER_ROW set to 14, it clears row 16 once.
-    li $s0, 16                          # $s0 = first row of the legacy holding-area clear pass.
-
-draw_player_clear_row:
-    li $s1, 0                           # $s1 = logical column, reset for each clear row.
-
-draw_player_clear_col:
-    move $a0, $s0                       # $a0 = logical screen row being cleared.
-    addiu $a1, $s1, 1                   # $a1 = screen column inside the side borders.
-    li $a2, CELL_EMPTY                  # $a2 = black, from the empty-cell palette entry.
-
-    jal draw_unit
-    nop
-
-    addiu $s1, $s1, 1
-    li $t0, PLAYFIELD_COLS
-    blt $s1, $t0, draw_player_clear_col
-    nop
-
-    addiu $s0, $s0, 1                   # Advance the clear pass to the next logical screen row.
-    li $t0, PLAYER_ROW
-    addiu $t0, $t0, 1                   # $t0 = exclusive upper limit for the clear pass.
-    blt $s0, $t0, draw_player_clear_row
-    nop
-
     lw $s1, player_col                  # $s1 = player's zero-based board column.
 
-    li $a0, PLAYER_ROW                  # $a0 = player's logical screen row (currently 14).
-    addiu $a1, $s1, 1                   # $a1 = player's logical screen column (board column + 1).
-    li $a2, CELL_PLAYER                 # $a2 = player colour ID.
+    addiu $a0, $s1, 1           # Screen column, including the left border
+    sll   $a0, $a0, 4           # Bitmap x = screen column × 16
 
-    jal draw_unit
+    li    $a1, PLAYER_ROW
+    sll   $a1, $a1, 4           # Bitmap y = screen row × 16
+
+    la    $a2, art_player_pixels
+    la    $a3, art_player_pal
+    jal   draw_sprite
     nop
 
     lw $s2, held_count                  # $s2 = held bubbles left to draw.
@@ -785,7 +1111,7 @@ draw_player_held_loop:
     addiu $a1, $s1, 1                   # $a1 = same logical screen column as the player.
     move $a2, $s3                       # $a2 = held bubble colour.
 
-    jal draw_unit
+    jal draw_bubble
     nop
 
     addiu $s0, $s0, -1                  # Move one logical row up for the next held bubble.
